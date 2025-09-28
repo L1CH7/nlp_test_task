@@ -44,7 +44,7 @@ models:
         weights: "distance"
 
     - name: "RandomForest"
-      type: "sklearn.ensemble"
+      type: "sklearn"
       module: "sklearn.ensemble"
       class: "RandomForestClassifier"
       params:

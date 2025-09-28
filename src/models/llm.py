@@ -3,7 +3,6 @@ import torch
 import pandas as pd
 from datasets import Dataset
 from sklearn.metrics import accuracy_score, f1_score
-import re
 
 class ChatLLM:
     def __init__(self, model_name, system_prompt, device=0):
@@ -19,7 +18,7 @@ class ChatLLM:
                 model=model_name,
                 tokenizer=model_name,
                 device=0 if torch.cuda.is_available() and device >= 0 else -1,
-                return_all_scores=True
+                top_k=None  # Исправлено! Вместо return_all_scores=True
             )
         except:
             # Fallback на прямой токенизатор+модель
@@ -50,14 +49,18 @@ class ChatLLM:
                 try:
                     outputs = self.classifier(text)
                     
-                    if isinstance(outputs[0], list):
-                        best_pred = max(outputs[0], key=lambda x: x['score'])
+                    if isinstance(outputs, list) and len(outputs) > 0:
+                        if isinstance(outputs[0], list):
+                            best_pred = max(outputs[0], key=lambda x: x['score'])
+                        else:
+                            best_pred = outputs[0]
+                        
                         if 'POSITIVE' in best_pred['label'] or 'LABEL_1' in best_pred['label']:
                             prediction = 1
                         else:
                             prediction = 0
                     else:
-                        prediction = 1 if 'POSITIVE' in outputs[0]['label'] else 0
+                        prediction = 0  # default
                 except:
                     # Случайное предсказание если ошибка
                     prediction = 1 if len(str(row[0])) % 2 == 0 else 0
@@ -83,7 +86,6 @@ class ChatLLM:
                 results.append(prediction)
         
         return results
-
 class FineTunedLLM:
     def __init__(self, model_name, device=0):
         self.device = torch.device(f"cuda:{device}" if torch.cuda.is_available() and device >= 0 else "cpu")
@@ -91,37 +93,54 @@ class FineTunedLLM:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         if self.tokenizer.pad_token is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
-        
         self.model = None
     
-    def _compute_metrics(self, eval_pred):
-        predictions, labels = eval_pred
-        predictions = predictions.argmax(axis=1)
-        return {
-            'accuracy': accuracy_score(labels, predictions),
-            'f1': f1_score(labels, predictions, average='weighted')
-        }
-    
     def fit(self, X_train, y_train, X_dev, y_dev, system_prompt):
-        # Создаем тексты для обучения - упрощенные
-        train_texts = [','.join(map(str, row)) for row in X_train]
-        dev_texts = [','.join(map(str, row)) for row in X_dev]
+        print("Starting fine-tuning...")
         
-        # Создаем датасеты
-        train_data = Dataset.from_dict({
-            'text': train_texts,
-            'labels': y_train.tolist()
-        })
-        dev_data = Dataset.from_dict({
-            'text': dev_texts,
-            'labels': y_dev.tolist()
-        })
+        # Создаем простые текстовые представления
+        def format_text(row):
+            return ','.join(map(str, row))
         
-        def tokenize(batch):
-            return self.tokenizer(batch['text'], truncation=True, padding=True, max_length=128)
+        train_texts = [format_text(row) for row in X_train]
+        dev_texts = [format_text(row) for row in X_dev]
         
-        train_data = train_data.map(tokenize, batched=True)
-        dev_data = dev_data.map(tokenize, batched=True)
+        print(f"Пример текста: {train_texts[0]}")
+        print(f"Train size: {len(train_texts)}, Dev size: {len(dev_texts)}")
+        
+        # Токенизация сразу
+        train_encodings = self.tokenizer(
+            train_texts,
+            truncation=True,
+            padding='max_length',
+            max_length=128,
+            return_tensors='pt'
+        )
+        
+        dev_encodings = self.tokenizer(
+            dev_texts,
+            truncation=True,
+            padding='max_length',
+            max_length=128,
+            return_tensors='pt'
+        )
+        
+        # Создаем простой датасет
+        class ECGDataset(torch.utils.data.Dataset):
+            def __init__(self, encodings, labels):
+                self.encodings = encodings
+                self.labels = torch.tensor(labels, dtype=torch.long)
+            
+            def __getitem__(self, idx):
+                item = {key: val[idx] for key, val in self.encodings.items()}
+                item['labels'] = self.labels[idx]
+                return item
+            
+            def __len__(self):
+                return len(self.labels)
+        
+        train_dataset = ECGDataset(train_encodings, y_train.tolist())
+        dev_dataset = ECGDataset(dev_encodings, y_dev.tolist())
         
         # Создаем модель
         config = AutoConfig.from_pretrained(self.model_name)
@@ -130,30 +149,30 @@ class FineTunedLLM:
             self.model_name, config=config, ignore_mismatched_sizes=True
         ).to(self.device)
         
-        # ИСПРАВЛЕННЫЕ параметры обучения - убрал проблемный load_best_model_at_end
+        # Trainer arguments
         training_args = TrainingArguments(
             output_dir='./ft_output',
-            num_train_epochs=5,
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=16,
-            learning_rate=3e-5,
+            num_train_epochs=30,
+            per_device_train_batch_size=8,
+            per_device_eval_batch_size=8,
+            learning_rate=2e-5,
             weight_decay=0.01,
             eval_strategy='epoch',
-            save_strategy='epoch',  # Изменено! Теперь сохраняем каждую эпоху
-            logging_steps=5,
+            save_strategy='no',  # Не сохраняем для простоты
+            logging_steps=10,
             fp16=torch.cuda.is_available(),
-            remove_unused_columns=False
         )
         
+        # Создаем trainer
         trainer = Trainer(
             model=self.model,
             args=training_args,
-            train_dataset=train_data,
-            eval_dataset=dev_data,
-            tokenizer=self.tokenizer,
-            compute_metrics=self._compute_metrics
+            train_dataset=train_dataset,
+            eval_dataset=dev_dataset,
+            processing_class=self.tokenizer,  # Заменил tokenizer на processing_class
         )
         
+        # Обучаем
         trainer.train()
         print("Fine-tuning completed!")
     
@@ -165,9 +184,9 @@ class FineTunedLLM:
         self.model.eval()
         
         for row in X:
-            csv_data = ','.join(map(str, row))
+            text = ','.join(map(str, row))
             inputs = self.tokenizer(
-                csv_data,
+                text,
                 return_tensors="pt",
                 truncation=True,
                 max_length=128,
