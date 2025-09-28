@@ -1,6 +1,6 @@
 data:
   raw_path: "data/ecg_data_raw.csv"
-  clean_path: "data/ecg_data_clean.csv"
+  clean_path: "data/ecg_data_clean.csv" 
   features:
     - rr_interval
     - p_onset
@@ -25,25 +25,49 @@ prompts:
 
 models:
   sklearn_methods:
-    - name: "LogisticRegression"
+    # Базовые методы с дефолтными параметрами
+    - name: "LogisticRegression_Default"
+      type: "sklearn"
+      module: "sklearn.linear_model"
+      class: "LogisticRegression"
+      params:
+        random_state: 42
+
+    - name: "KNN_Default"
+      type: "sklearn"
+      module: "sklearn.neighbors"
+      class: "KNeighborsClassifier"
+      params:
+        n_neighbors: 5
+
+    - name: "RandomForest_Default" 
+      type: "sklearn"
+      module: "sklearn.ensemble"
+      class: "RandomForestClassifier"
+      params:
+        random_state: 42
+
+    - name: "XGBoost_Default"
+      type: "sklearn"
+      module: "xgboost"
+      class: "XGBClassifier"
+      params:
+        random_state: 42
+        use_label_encoder: false
+        eval_metric: "logloss"
+
+    # Оптимизированные методы для дисбаланса классов
+    - name: "LogisticRegression_Balanced"
       type: "sklearn"
       module: "sklearn.linear_model"
       class: "LogisticRegression"
       params:
         C: 1.0
         max_iter: 1000
-        random_state: 42
         class_weight: "balanced"
+        random_state: 42
 
-    - name: "KNN"
-      type: "sklearn"
-      module: "sklearn.neighbors"
-      class: "KNeighborsClassifier"
-      params:
-        n_neighbors: 7
-        weights: "distance"
-
-    - name: "RandomForest"
+    - name: "RandomForest_Tuned"
       type: "sklearn"
       module: "sklearn.ensemble"
       class: "RandomForestClassifier"
@@ -54,7 +78,7 @@ models:
         class_weight: "balanced"
         random_state: 42
 
-    - name: "XGBoost"
+    - name: "XGBoost_Tuned"
       type: "sklearn"
       module: "xgboost"
       class: "XGBClassifier"
@@ -62,11 +86,12 @@ models:
         n_estimators: 300
         learning_rate: 0.05
         max_depth: 8
+        scale_pos_weight: 2.7
         use_label_encoder: false
         eval_metric: "logloss"
-        scale_pos_weight: 2.7
 
   llm_methods:
+    # Chat методы с разными промптами
     - name: "RuBERT_Chat_Simple"
       type: "llm_chat"
       model_name: "DeepPavlov/rubert-base-cased"
@@ -79,38 +104,84 @@ models:
       prompt_key: "detailed"
       device: 0
 
-    - name: "RuBERT_Chat_CoT"
-      type: "llm_chat"
-      model_name: "DeepPavlov/rubert-base-cased"
-      prompt_key: "chain_of_thought"
-      device: 0
-
-    - name: "RuBERT_FineTuned"
+    # Fine-tuned модели с разными параметрами обучения
+    - name: "RuBERT_FineTuned_Fast"
       type: "llm_finetune"
       model_name: "DeepPavlov/rubert-base-cased"
       prompt_key: "simple"
       device: 0
+      save_model: true
+      save_path: "models/rubert_fast"
+      training_params:
+        num_train_epochs: 10
+        per_device_train_batch_size: 16
+        learning_rate: 3e-5
+        weight_decay: 0.01
+        warmup_steps: 50
 
-    - name: "XLM_RoBERTa_Chat"
-      type: "llm_chat"
-      model_name: "xlm-roberta-base"
-      prompt_key: "detailed"
+    - name: "RuBERT_FineTuned_Careful"
+      type: "llm_finetune"
+      model_name: "DeepPavlov/rubert-base-cased"
+      prompt_key: "simple"
       device: 0
+      save_model: true
+      save_path: "models/rubert_careful"
+      training_params:
+        num_train_epochs: 20
+        per_device_train_batch_size: 8
+        learning_rate: 1e-5
+        weight_decay: 0.05
+        warmup_steps: 100
+        lr_scheduler_type: "cosine"
 
-    - name: "BiomedBERT_Chat"
-      type: "llm_chat"
+    - name: "RuBERT_FineTuned_Aggressive"
+      type: "llm_finetune"
+      model_name: "DeepPavlov/rubert-base-cased"
+      prompt_key: "simple"
+      device: 0
+      save_model: true
+      save_path: "models/rubert_aggressive"
+      training_params:
+        num_train_epochs: 50
+        per_device_train_batch_size: 4
+        learning_rate: 5e-6
+        weight_decay: 0.1
+        warmup_ratio: 0.1
+        lr_scheduler_type: "linear"
+
+    # Медицинские модели
+    - name: "BiomedBERT_FineTuned"
+      type: "llm_finetune"
       model_name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
       prompt_key: "medical_english"
       device: 0
+      save_model: true
+      save_path: "models/biomedbert"
+      training_params:
+        num_train_epochs: 15
+        per_device_train_batch_size: 8
+        learning_rate: 2e-5
+        weight_decay: 0.02
 
-    - name: "ClinicalBERT_Chat"
-      type: "llm_chat"
+    - name: "ClinicalBERT_FineTuned"
+      type: "llm_finetune"
       model_name: "emilyalsentzer/Bio_ClinicalBERT"
       prompt_key: "medical_english"
       device: 0
+      save_model: true
+      save_path: "models/clinicalbert"
+      training_params:
+        num_train_epochs: 15
+        per_device_train_batch_size: 8
+        learning_rate: 2e-5
+        weight_decay: 0.02
 
+    # Базовые методы
     - name: "Rule_Based"
       type: "rule_based"
 
 experiments:
   results_csv: "results.csv"
+  shuffle_data: true
+  stratify: true
+  model_cache_dir: "models/"

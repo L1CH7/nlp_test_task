@@ -30,6 +30,14 @@ def create_model(config, prompts=None):
     
     elif config['type'] == 'rule_based':
         return SimpleRuleBasedClassifier()
-    
+        
+    elif config['type'] == 'llm_finetune':
+        device = config.get('device', 0)
+        model = FineTunedLLM(config['model_name'], device)
+        # Сохраняем параметры для использования в fit()
+        model.training_params = config.get('training_params', {})
+        model.save_model = config.get('save_model', False)
+        model.save_path = config.get('save_path', None)
+        return model
     else:
         raise ValueError(f"Unknown model type: {config['type']}")

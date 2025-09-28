@@ -84,13 +84,26 @@ def run_experiments(config_path: str, dataset_key: str):
             model = create_model(model_cfg, prompts)
 
             if model_cfg['type'] == 'llm_finetune':
-                # Fine-tuning
+                # Исправлено! Берем prompt_key из конфига модели
                 prompt_key = model_cfg['prompt_key']
                 system_prompt = prompts[prompt_key]
-                model.fit(X_train[features].values, y_train, X_dev[features].values, y_dev, system_prompt)
+                
+                model.fit(
+                    X_train[features].values, y_train, 
+                    X_dev[features].values, y_dev, 
+                    system_prompt,
+                    training_params=getattr(model, 'training_params', {}),
+                    save_model=getattr(model, 'save_model', False),
+                    save_path=getattr(model, 'save_path', None)
+                )
                 preds = model.predict(X_test[features].values)
-            else:
-                # Chat модели
+            
+            elif model_cfg['type'] == 'llm_chat':
+                # Chat модели (остается как было)
+                preds = model.predict(X_test[features].values)
+            
+            elif model_cfg['type'] == 'rule_based':
+                # Rule-based (остается как было)
                 preds = model.predict(X_test[features].values)
 
             report = classification_report(y_test, preds, output_dict=True, zero_division=0)
@@ -107,6 +120,9 @@ def run_experiments(config_path: str, dataset_key: str):
             print(f"Ошибка в модели {name}: {e}")
             import traceback
             traceback.print_exc()
+            results.append({
+                'model': name, 'accuracy': 0, 'precision': 0, 'recall': 0, 'f1': 0
+            })
 
     # Сохраняем
     out_df = pd.DataFrame(results)
