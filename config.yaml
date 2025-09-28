@@ -21,6 +21,7 @@ prompts:
   simple: "promts/1.dat"
   detailed: "promts/2.dat"
   chain_of_thought: "promts/3.dat"
+  medical_english: "promts/4.dat"
 
 models:
   sklearn_methods:
@@ -32,22 +33,25 @@ models:
         C: 1.0
         max_iter: 1000
         random_state: 42
+        class_weight: "balanced"
 
     - name: "KNN"
       type: "sklearn"
-      module: "sklearn.neighbors" 
+      module: "sklearn.neighbors"
       class: "KNeighborsClassifier"
       params:
-        n_neighbors: 5
+        n_neighbors: 7
+        weights: "distance"
 
     - name: "RandomForest"
-      type: "sklearn"
+      type: "sklearn.ensemble"
       module: "sklearn.ensemble"
       class: "RandomForestClassifier"
       params:
-        n_estimators: 200
-        max_depth: 10
+        n_estimators: 300
+        max_depth: 15
         min_samples_split: 5
+        class_weight: "balanced"
         random_state: 42
 
     - name: "XGBoost"
@@ -55,11 +59,12 @@ models:
       module: "xgboost"
       class: "XGBClassifier"
       params:
-        n_estimators: 200
-        learning_rate: 0.1
-        max_depth: 6
+        n_estimators: 300
+        learning_rate: 0.05
+        max_depth: 8
         use_label_encoder: false
         eval_metric: "logloss"
+        scale_pos_weight: 2.7
 
   llm_methods:
     - name: "RuBERT_Chat_Simple"
@@ -95,14 +100,17 @@ models:
     - name: "BiomedBERT_Chat"
       type: "llm_chat"
       model_name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
-      prompt_key: "detailed"
+      prompt_key: "medical_english"
       device: 0
 
     - name: "ClinicalBERT_Chat"
       type: "llm_chat"
       model_name: "emilyalsentzer/Bio_ClinicalBERT"
-      prompt_key: "detailed"
+      prompt_key: "medical_english"
       device: 0
+
+    - name: "Rule_Based"
+      type: "rule_based"
 
 experiments:
   results_csv: "results.csv"
