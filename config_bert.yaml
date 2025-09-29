@@ -1,0 +1,82 @@
+data:
+  raw_path: "data/ecg_data_raw.csv"
+  clean_path: "data/ecg_data_clean.csv" 
+  features:
+    - rr_interval
+    - p_onset
+    - p_end
+    - qrs_onset
+    - qrs_end
+    - t_end
+    - p_axis
+    - qrs_axis
+    - t_axis
+  label: "Healthy"
+  split:
+    test_size: 0.15
+    dev_size: 0.15
+    random_state: 42
+
+prompts:
+  simple: "promts/1.dat"
+  detailed: "promts/2.dat"
+  chain_of_thought: "promts/3.dat"
+  medical_english: "promts/4.dat"
+
+models:
+  sklearn_methods: []
+
+  llm_methods:
+    - name: "RuBERT_FineTuned_Fast"
+      type: "llm_finetune"
+      model_name: "DeepPavlov/rubert-base-cased"
+      prompt_key: "simple"
+      device: 0
+      save_model: true
+      save_path: "models/rubert_fast"
+      training_params:
+        num_train_epochs: 10
+        per_device_train_batch_size: 16
+        learning_rate: 3e-5
+        weight_decay: 0.01
+        warmup_steps: 50
+        lr_scheduler_type: "linear"
+
+    # УЛУЧШЕННЫЙ ClinicalBERT (уже хорошо, но можно лучше)
+    - name: "ClinicalBERT_FineTuned_Optimized"
+      type: "llm_finetune"
+      model_name: "emilyalsentzer/Bio_ClinicalBERT"
+      prompt_key: "medical_english"
+      device: 0
+      save_model: true
+      save_path: "models/clinicalbert_opt"
+      training_params:
+        num_train_epochs: 15        # Больше эпох для медицинской модели
+        per_device_train_batch_size: 12  # Средний batch
+        learning_rate: 2e-5         # Чуть медленнее для стабильности
+        weight_decay: 0.02          # Больше регуляризации
+        warmup_steps: 75            # Больше warmup
+        lr_scheduler_type: "cosine" # Лучший scheduler для долгого обучения
+
+    # УЛУЧШЕННЫЙ BiomedBERT (нужно поднять с 0.758)
+    - name: "BiomedBERT_FineTuned_Enhanced"  
+      type: "llm_finetune"
+      model_name: "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
+      prompt_key: "medical_english"
+      device: 0
+      save_model: true
+      save_path: "models/biomedbert_enh"
+      training_params:
+        num_train_epochs: 18        # Больше эпох (модель медленнее учится)
+        per_device_train_batch_size: 10
+        learning_rate: 1.5e-5       # Медленнее learning rate  
+        weight_decay: 0.03          # Еще больше регуляризации
+        warmup_steps: 100           # Длинный warmup
+        warmup_ratio: 0.1           # 10% от обучения на warmup
+        lr_scheduler_type: "polynomial"  # Мягкое снижение LR
+
+experiments:
+  results_csv: "results.csv"
+  shuffle_data: true
+  stratify: true
+  model_cache_dir: "models/"

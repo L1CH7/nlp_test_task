@@ -108,7 +108,7 @@ models:
     - name: "RuBERT_FineTuned_Fast"
       type: "llm_finetune"
       model_name: "DeepPavlov/rubert-base-cased"
-      prompt_key: "simple"
+      prompt_key: "detailed"
       device: 0
       save_model: true
       save_path: "models/rubert_fast"
@@ -122,7 +122,7 @@ models:
     - name: "RuBERT_FineTuned_Careful"
       type: "llm_finetune"
       model_name: "DeepPavlov/rubert-base-cased"
-      prompt_key: "simple"
+      prompt_key: "detailed"
       device: 0
       save_model: true
       save_path: "models/rubert_careful"
@@ -137,7 +137,7 @@ models:
     - name: "RuBERT_FineTuned_Aggressive"
       type: "llm_finetune"
       model_name: "DeepPavlov/rubert-base-cased"
-      prompt_key: "simple"
+      prompt_key: "detailed"
       device: 0
       save_model: true
       save_path: "models/rubert_aggressive"

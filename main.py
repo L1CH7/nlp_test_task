@@ -12,4 +12,4 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    run_experiments('config.yaml', args.dataset)
+    run_experiments('config_only_med.yaml', args.dataset)
